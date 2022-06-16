@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="detail">
+      <UniqueIdentifier>{18D587F8-0477-B2CE-ED31-C622D972391F}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\src\gc\detail\compressed_pair.h">
+      <Filter>detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gc\detail\functor.h">
+      <Filter>detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gc\detail\intrusive_list.h">
+      <Filter>detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gc\detail\vector.h">
+      <Filter>detail</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\gc\gc.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\src\gc\gc.cpp" />
+  </ItemGroup>
+</Project>
