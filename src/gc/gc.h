@@ -43,11 +43,16 @@ struct memory_range
     std::byte* end{};
 };
 
+struct range_info : memory_range
+{
+    bool managed{};
+    bool scanned{};
+};
+
 struct scan_info
 {
     void* gp;
-    memory_range range;
-    bool managed;
+    range_info* range;
 };
 
 class garbage
@@ -90,6 +95,7 @@ class graph
     detail::vector<memory_range> ranges;
 
     std::chrono::steady_clock::time_point collectionStart;
+    detail::vector<range_info> rngs;
     detail::vector<scan_info> info;
     detail::vector<uint32_t> scan;
     detail::vector<uint32_t> keep;

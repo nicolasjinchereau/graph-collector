@@ -20,6 +20,7 @@ graph::That graph::that;
 graph::graph()
 {
     ranges.reserve(100'000);
+    rngs.reserve(100'000);
     info.reserve(100'000);
     scan.reserve(100'000);
     keep.reserve(100'000);
@@ -83,8 +84,6 @@ garbage graph::collect() {
 
 garbage graph::collect_impl()
 {
-    detail::vector<std::shared_ptr<void>> unreachable;
-    
     if (that->collecting.exchange(true)) {
         printf("collection already in progress\n");
         return garbage();
@@ -92,6 +91,8 @@ garbage graph::collect_impl()
 
     auto start = std::chrono::steady_clock::now();
 
+    size_t managedPointerCount = 0;
+    
     {
         std::scoped_lock lk(pointerLock, graphLock);
 
@@ -100,14 +101,21 @@ garbage graph::collect_impl()
         scan.reserve(totalPointers);
         keep.reserve(totalPointers);
 
+        rngs.reserve(ranges.size());
+        for(auto& r : ranges)
+            rngs.push_back({ r.begin, r.end, false, false });
+
         for (auto& gp : pointers)
         {
             if (gp)
             {
+                auto it_r = find_range_iterator(gp.get());
+                size_t idx_r = static_cast<size_t>(it_r - ranges.begin());
+
                 scan_info si;
                 si.gp = &gp;
-                si.range = *find_range(gp.get());
-                si.managed = true;
+                si.range = &rngs[idx_r];
+                si.range->managed = true;
 
                 uint32_t idx = (uint32_t)info.size();
                 info.push_back(si);
@@ -116,18 +124,22 @@ garbage graph::collect_impl()
                     keep.push_back(idx);
                 else
                     scan.push_back(idx);
+
+                ++managedPointerCount;
             }
         }
 
         for (auto& rgp : rawPointers)
         {
-            auto range = find_range(rgp.ptr);
-            if (range)
+            auto it_r = find_range_iterator(rgp.ptr);
+            if (it_r != ranges.end())
             {
+                size_t idx_r = static_cast<size_t>(it_r - ranges.begin());
+
                 scan_info si;
                 si.gp = &rgp;
-                si.range = *range;
-                si.managed = false;
+                si.range = &rngs[idx_r];
+                si.range->managed = false;
 
                 uint32_t idx = (uint32_t)info.size();
                 info.push_back(si);
@@ -140,54 +152,49 @@ garbage graph::collect_impl()
         }
     } // scoped_lock
 
-    unreachable.reserve(scan.size() + keep.size());
+    detail::vector<std::shared_ptr<void>> unreachable;
+    unreachable.reserve(managedPointerCount);
 
     for (size_t i = 0; i != keep.size(); ++i)
     {
         scan_info& parent = info[keep[i]];
 
-        auto it = scan.begin();
-        auto scanEnd = scan.end();
+        if(parent.range->scanned)
+            continue;
 
-        for( ; it != scanEnd; ++it)
+        for(auto it = scan.begin(); it != scan.end(); )
         {
             auto idx = *it;
 
             std::byte* bp = static_cast<std::byte*>(info[idx].gp);
-            if (bp >= parent.range.begin && bp < parent.range.end) {
-                keep.push_back(idx);
-                break;
-            }
-        }
 
-        if(it != scanEnd)
-        {
-            for(auto it2 = it; ++it2 != scanEnd; )
+            if (bp >= parent.range->begin && bp < parent.range->end)
             {
-                uint32_t idx = *it2;
-                std::byte* bp = static_cast<std::byte*>(info[idx].gp);
-
-                if (bp >= parent.range.begin && bp < parent.range.end)
-                    keep.push_back(idx);
-                else
-                    *it++ = idx;
+                keep.push_back(idx);
+                *it = scan.back();
+                scan.pop_back();
             }
-
-            scan.erase(it, scanEnd);
+            else
+            {
+                ++it;
+            }
         }
+
+        parent.range->scanned = true;
     }
 
     for (auto& idx : scan)
     {
         scan_info& si = info[idx];
 
-        if (si.managed)
+        if (si.range->managed)
         {
             auto mptr = static_cast<graph_ptr<void>*>(si.gp);
             unreachable.push_back(std::move(mptr->ptr));
         }
     }
 
+    rngs.clear();
     info.clear();
     scan.clear();
     keep.clear();
